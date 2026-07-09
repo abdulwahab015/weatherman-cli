@@ -1,13 +1,22 @@
-"""Data structures used across the Weatherman application"""
+"""Data structures used across the Weatherman application.
+
+Each record is an immutable NamedTuple: cheaper to create and compare
+than a dict (no hashing of string keys per access), and self-documenting
+through attribute access (reading.max_temp) instead of string keys
+(reading["max_temp"]), which also means a typo becomes an AttributeError
+at the point of use instead of a silent None from a mistyped dict key.
+"""
 
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional, TypedDict
+from typing import NamedTuple, Optional
 
 
-class WeatherReading(TypedDict):
-    """One day's weather reading."""
+class WeatherReading(NamedTuple):
+    """One day's weather reading.
+
+    Any numeric field may be None if the source file left that cell blank."""
 
     date: date
     max_temp: Optional[int]
@@ -18,12 +27,16 @@ class WeatherReading(TypedDict):
     min_humidity: Optional[int]
 
 
-# All readings bucketed by (year, month)
+# All readings for a directory, bucketed by (year, month) at parse time.
+# This stays a plain dict rather than a NamedTuple, since it is a lookup
+# index with a variable number of entries - not a fixed-shape record.
+# Grouping up front means monthly/daily reports do a direct dict lookup
+# instead of re-scanning every reading in the whole dataset.
 ReadingsByMonth = dict[tuple[int, int], list[WeatherReading]]
 
 
-class YearlyExtremes(TypedDict):
-    """Result shape for the yearly extremes report (-e)"""
+class YearlyExtremes(NamedTuple):
+    """Result of the yearly extremes report (``-e``)."""
 
     year: int
     highest_temp: int
@@ -34,8 +47,8 @@ class YearlyExtremes(TypedDict):
     most_humid_date: date
 
 
-class MonthlyAverages(TypedDict):
-    """Result shape for the monthly averages report (-a)"""
+class MonthlyAverages(NamedTuple):
+    """Result of the monthly averages report (``-a``)."""
 
     year: int
     month: int
@@ -44,8 +57,8 @@ class MonthlyAverages(TypedDict):
     avg_mean_humidity: float
 
 
-class DailyExtremes(TypedDict):
-    """One day's high/low pair, used for the (-c) bar chart report"""
+class DailyExtreme(NamedTuple):
+    """One day's high/low pair, used for the ``-c`` bar chart report."""
 
     day: int
     max_temp: Optional[int]
