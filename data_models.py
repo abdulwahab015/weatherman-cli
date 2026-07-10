@@ -1,22 +1,19 @@
-"""Data structures used across the Weatherman application.
+"""Data models for the Weatherman application.
 
-Each record is an immutable NamedTuple: cheaper to create and compare
-than a dict (no hashing of string keys per access), and self-documenting
-through attribute access (reading.max_temp) instead of string keys
-(reading["max_temp"]), which also means a typo becomes an AttributeError
-at the point of use instead of a silent None from a mistyped dict key.
+This module provides strictly typed, memory-efficient data structures 
+using slotted dataclasses to represent weather data and report results.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
-from typing import NamedTuple, Optional
+from typing import Optional
 
 
-class WeatherReading(NamedTuple):
-    """One day's weather reading.
-
-    Any numeric field may be None if the source file left that cell blank."""
+@dataclass(slots=True)
+class WeatherReading:
+    """Represents a single day's weather observation."""
 
     date: date
     max_temp: Optional[int]
@@ -27,16 +24,12 @@ class WeatherReading(NamedTuple):
     min_humidity: Optional[int]
 
 
-# All readings for a directory, bucketed by (year, month) at parse time.
-# This stays a plain dict rather than a NamedTuple, since it is a lookup
-# index with a variable number of entries - not a fixed-shape record.
-# Grouping up front means monthly/daily reports do a direct dict lookup
-# instead of re-scanning every reading in the whole dataset.
 ReadingsByMonth = dict[tuple[int, int], list[WeatherReading]]
 
 
-class YearlyExtremes(NamedTuple):
-    """Result of the yearly extremes report (``-e``)."""
+@dataclass(slots=True)
+class YearlyExtremes:
+    """Encapsulates the computed results for the yearly extremes report."""
 
     year: int
     highest_temp: int
@@ -47,8 +40,9 @@ class YearlyExtremes(NamedTuple):
     most_humid_date: date
 
 
-class MonthlyAverages(NamedTuple):
-    """Result of the monthly averages report (``-a``)."""
+@dataclass(slots=True)
+class MonthlyAverages:
+    """Encapsulates the computed results for the monthly averages report."""
 
     year: int
     month: int
@@ -57,8 +51,9 @@ class MonthlyAverages(NamedTuple):
     avg_mean_humidity: float
 
 
-class DailyExtreme(NamedTuple):
-    """One day's high/low pair, used for the ``-c`` bar chart report."""
+@dataclass(slots=True)
+class DailyExtreme:
+    """Encapsulates the high and low temperatures for a specific day."""
 
     day: int
     max_temp: Optional[int]
