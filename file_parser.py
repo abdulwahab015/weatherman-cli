@@ -1,150 +1,124 @@
-"""Reads raw Weatherman data files into WeatherReading records."""
-
-from __future__ import annotations
+"""Module for parsing weather data files using object-oriented principles."""
 
 import csv
-import logging
 from datetime import date, datetime
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional
+from typing import Optional
 
-from constants import (
-    COLUMN_MAX_HUMIDITY,
-    COLUMN_MAX_TEMP,
-    COLUMN_MEAN_HUMIDITY,
-    COLUMN_MEAN_TEMP,
-    COLUMN_MIN_HUMIDITY,
-    COLUMN_MIN_TEMP,
-    DATE_FORMAT,
-)
+from constants import DATE_FORMAT
 from data_models import ReadingsByMonth, WeatherReading
-
-logger = logging.getLogger(__name__)
-
-# Maps each WeatherReading numeric field name to the CSV column it comes
-# from. Iterating this in one place - instead of six near-identical lines
-# repeated wherever fields are read - is what keeps column names DRY.
-NUMERIC_COLUMNS_BY_FIELD = {
-    "max_temp": COLUMN_MAX_TEMP,
-    "mean_temp": COLUMN_MEAN_TEMP,
-    "min_temp": COLUMN_MIN_TEMP,
-    "max_humidity": COLUMN_MAX_HUMIDITY,
-    "mean_humidity": COLUMN_MEAN_HUMIDITY,
-    "min_humidity": COLUMN_MIN_HUMIDITY,
-}
+from mappings import NUMERIC_COLUMNS_BY_FIELD
 
 
-def _parse_numeric_cell(raw_value: Optional[str]) -> Optional[int]:
-    """Convert a CSV cell to an int; blanks or non-numeric text become None."""
-    stripped_value = (raw_value or "").strip()
-    parsed_value: Optional[int] = None
-    if stripped_value:
+class WeatherDataParser:
+    """Parses individual raw weather CSV files into structured data models."""
+
+    def parse_integer(self, cell_data: Optional[str]) -> Optional[int]:
+        """Converts a raw string cell value into an integer safely."""
+        clean_data = (cell_data or "").strip()
+        parsed_value: Optional[int] = None
+
+        if clean_data:
+            try:
+                parsed_value = int(round(float(clean_data)))
+            except ValueError:
+                parsed_value = None
+
+        return parsed_value
+
+    def parse_date(self, cell_data: Optional[str]) -> Optional[date]:
+        """Parses a raw date string cell into a standard datetime.date object."""
+        parsed_date: Optional[date] = None
+
         try:
-            parsed_value = int(round(float(stripped_value)))
+            parsed_date = datetime.strptime(
+                (cell_data or "").strip(), DATE_FORMAT
+            ).date()
         except ValueError:
-            parsed_value = None
-    return parsed_value
+            parsed_date = None
+
+        return parsed_date
+
+    def build_reading(
+        self, row_data: dict[str, str], date_column: str
+    ) -> Optional[WeatherReading]:
+        """Constructs a single WeatherReading from a normalized row dictionary."""
+        reading_date = self.parse_date(row_data.get(date_column, ""))
+        reading: Optional[WeatherReading] = None
+
+        if reading_date:
+            numeric_fields = {
+                field_name: self.parse_integer(row_data.get(column_name))
+                for field_name, column_name in NUMERIC_COLUMNS_BY_FIELD.items()
+            }
+
+            if any(value is not None for value in numeric_fields.values()):
+                reading = WeatherReading(reading_date=reading_date, **numeric_fields)
+
+        return reading
+
+    def parse_file(self, file_path: Path) -> list[WeatherReading]:
+        """Reads and parses every usable row from a specific file."""
+        readings: list[WeatherReading] = []
+
+        with file_path.open(newline="", encoding="utf-8", errors="replace") as stream:
+            reader = csv.DictReader(stream)
+            clean_headers = [
+                header.strip() for header in (reader.fieldnames or []) if header
+            ]
+
+            if clean_headers:
+                date_column, *_ = clean_headers
+                for raw_row in reader:
+                    normalized_row = {
+                        column_name.strip(): cell_data
+                        for column_name, cell_data in raw_row.items()
+                        if column_name is not None
+                    }
+                    reading = self.build_reading(normalized_row, date_column)
+                    if reading:
+                        readings.append(reading)
+
+        return readings
 
 
-def _parse_reading_date(raw_value: str) -> Optional[date]:
-    """Parse a date cell; anything not matching DATE_FORMAT becomes None."""
-    parsed_date: Optional[date] = None
-    try:
-        parsed_date = datetime.strptime(raw_value.strip(), DATE_FORMAT).date()
-    except ValueError:
-        parsed_date = None
-    return parsed_date
+class DirectoryParser:
+    """Handles directory scanning and aggregates streamed weather observations by month."""
 
+    def __init__(self, file_parser: WeatherDataParser) -> None:
+        """Injects the required single-file parser dependency."""
+        self.file_parser = file_parser
 
-def _normalize_row_keys(raw_row: Dict[str, str]) -> Dict[str, str]:
-    """Strip stray whitespace from column names, e.g. ' Mean Humidity'."""
-    return {key.strip(): value for key, value in raw_row.items() if key is not None}
+    def process_directory(self, directory_path: Path) -> ReadingsByMonth:
+        """Scans a directory and aggregates all valid observations bucketed by year and month."""
+        weather_files = self._find_weather_files(directory_path)
+        readings_by_month: ReadingsByMonth = {}
 
-
-def _extract_numeric_fields(row: Dict[str, str]) -> Dict[str, Optional[int]]:
-    """Pull and parse all six numeric columns from one CSV row."""
-    return {
-        field_name: _parse_numeric_cell(row.get(column_name))
-        for field_name, column_name in NUMERIC_COLUMNS_BY_FIELD.items()
-    }
-
-
-def _has_any_numeric_data(numeric_fields: Dict[str, Optional[int]]) -> bool:
-    """A row is only usable if at least one numeric field was present."""
-    return any(value is not None for value in numeric_fields.values())
-
-
-def _build_reading_from_row(
-    date_column_name: str, row: Dict[str, str]
-) -> Optional[WeatherReading]:
-    """Build one WeatherReading from a CSV row, or None if the row is unusable."""
-    reading: Optional[WeatherReading] = None
-    reading_date = _parse_reading_date(row.get(date_column_name, "") or "")
-
-    if reading_date:
-        numeric_fields = _extract_numeric_fields(row)
-        if _has_any_numeric_data(numeric_fields):
-            reading = WeatherReading(date=reading_date, **numeric_fields)
-
-    return reading
-
-
-def read_readings_from_file(path: Path) -> Iterator[WeatherReading]:
-    """Yield one WeatherReading per usable row in a single weather file."""
-    with path.open(newline="", encoding="utf-8", errors="replace") as handle:
-        reader = csv.DictReader(handle)
-        if not reader.fieldnames:
-            return
-
-        date_column_name = reader.fieldnames[0].strip()
-
-        for line_number, raw_row in enumerate(reader, start=2):
-            row = _normalize_row_keys(raw_row)
-            reading = _build_reading_from_row(date_column_name, row)
-            if reading is None:
-                logger.debug(
-                    "%s line %d: skipped (bad date or fully blank row)",
-                    path.name,
-                    line_number,
-                )
+        for file_path in weather_files:
+            try:
+                self._add_file_readings(file_path, readings_by_month)
+            except (OSError, csv.Error):
                 continue
-            yield reading
 
+        return readings_by_month
 
-def group_readings_by_month(readings: Iterable[WeatherReading]) -> ReadingsByMonth:
-    """Index a flat stream of readings into a dict keyed by (year, month)."""
-    readings_by_month: ReadingsByMonth = {}
-    for reading in readings:
-        month_key = (reading.date.year, reading.date.month)
-        readings_by_month.setdefault(month_key, []).append(reading)
-    return readings_by_month
+    def _find_weather_files(self, directory_path: Path) -> list[Path]:
+        """Validates the directory and returns the .txt files inside it."""
+        if not directory_path.is_dir():
+            raise NotADirectoryError(f"'{directory_path}' is not a valid directory")
 
+        weather_files = sorted(directory_path.glob("*.txt"))
+        if not weather_files:
+            raise FileNotFoundError(
+                f"No .txt weather files found in '{directory_path}'"
+            )
 
-def _find_weather_files(directory: Path) -> List[Path]:
-    """Locate the .txt weather files inside a directory, validating as we go."""
-    if not directory.is_dir():
-        raise NotADirectoryError(f"{directory} is not a valid directory")
+        return weather_files
 
-    weather_files = sorted(directory.glob("*.txt"))
-    if not weather_files:
-        raise FileNotFoundError(f"No .txt weather files found in {directory}")
-
-    return weather_files
-
-
-def _read_all_readings(weather_files: Iterable[Path]) -> List[WeatherReading]:
-    """Read every given file, skipping (and logging) any that can't be read."""
-    all_readings: List[WeatherReading] = []
-    for file_path in weather_files:
-        try:
-            all_readings.extend(read_readings_from_file(file_path))
-        except (OSError, csv.Error) as exc:
-            logger.warning("Skipping unreadable file %s: %s", file_path.name, exc)
-    return all_readings
-
-
-def parse_directory(directory: Path) -> ReadingsByMonth:
-    """Read every .txt file in directory and index all readings by month."""
-    weather_files = _find_weather_files(directory)
-    all_readings = _read_all_readings(weather_files)
-    return group_readings_by_month(all_readings)
+    def _add_file_readings(
+        self, file_path: Path, readings_by_month: ReadingsByMonth
+    ) -> None:
+        """Parses one file and merges its readings into the shared month buckets."""
+        for reading in self.file_parser.parse_file(file_path):
+            month_key = (reading.reading_date.year, reading.reading_date.month)
+            readings_by_month.setdefault(month_key, []).append(reading)
