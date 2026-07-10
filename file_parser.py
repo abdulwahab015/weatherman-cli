@@ -81,7 +81,7 @@ def _build_reading_from_row(
     reading: Optional[WeatherReading] = None
     reading_date = _parse_reading_date(row.get(date_column_name, "") or "")
 
-    if reading_date is not None:
+    if reading_date:
         numeric_fields = _extract_numeric_fields(row)
         if _has_any_numeric_data(numeric_fields):
             reading = WeatherReading(date=reading_date, **numeric_fields)
