@@ -6,25 +6,16 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional
 
-from calculations import (
-    calculate_daily_extremes,
-    calculate_monthly_averages,
-    calculate_yearly_extremes,
-)
+from calculations import WeatherCalculator
 from data_models import ReadingsByMonth
-from file_parser import parse_directory
-from report_generator import (
-    render_combined_temperature_bars,
-    render_separate_temperature_bars,
-    render_monthly_averages,
-    render_yearly_extremes,
-)
+from file_parser import DirectoryParser, WeatherDataParser
+from report_generator import ConsoleReportGenerator
 
 
-def parse_year_month_argument(value: str) -> Tuple[int, int]:
-    """argparse type-hook: parse 'YYYY/M' into (year, month)."""
+def parse_year_month_argument(value: str) -> tuple[int, int]:
+    """Parses a 'YYYY/M' string into an integer tuple of (year, month)."""
     try:
         year_text, month_text = value.split("/")
         return int(year_text), int(month_text)
@@ -33,6 +24,7 @@ def parse_year_month_argument(value: str) -> Tuple[int, int]:
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
+    """Constructs the command-line interface argument parser."""
     parser = argparse.ArgumentParser(
         prog="weatherman.py",
         description="Generate reports from historical weather data files.",
@@ -47,7 +39,6 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Render -c as one combined bar per day (bonus report) instead of two bars",
     )
 
-    # DRY Improvement: Loop through similar report arguments
     reports = [
         ("-e", int, "YEAR", "Yearly extremes report"),
         ("-a", parse_year_month_argument, "YEAR/MONTH", "Monthly averages report"),
@@ -60,80 +51,107 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _yearly_report(
+    year: int, calculator: WeatherCalculator, reporter: ConsoleReportGenerator
+) -> tuple[Optional[str], Optional[str]]:
+    """Returns (rendered_text, error_message) - exactly one of the two is None."""
+    result = calculator.calculate_yearly_extremes(year)
+    if result is None:
+        return None, f"No readings found for year {year}"
+
+    return reporter.render_yearly_extremes(result), None
+
+
+def _monthly_report(
+    year: int,
+    month: int,
+    calculator: WeatherCalculator,
+    reporter: ConsoleReportGenerator,
+) -> tuple[Optional[str], Optional[str]]:
+    result = calculator.calculate_monthly_averages(year, month)
+    if result is None:
+        return None, f"No readings found for {year}-{month:02d}"
+
+    return reporter.render_monthly_averages(result), None
+
+
+def _daily_report(
+    year: int,
+    month: int,
+    combined: bool,
+    calculator: WeatherCalculator,
+    reporter: ConsoleReportGenerator,
+) -> tuple[Optional[str], Optional[str]]:
+    result = calculator.calculate_daily_extremes(year, month)
+    if result is None:
+        return None, f"No readings found for {year}-{month:02d}"
+    render = (
+        reporter.render_combined_temperature_bars
+        if combined
+        else reporter.render_separate_temperature_bars
+    )
+
+    return render(year, month, result), None
+
+
 def build_requested_reports(
     args: argparse.Namespace, readings_by_month: ReadingsByMonth
-) -> Tuple[List[str], Optional[str]]:
-    """Compute and render every report the user asked for, in a fixed order."""
-    reports: List[str] = []
+) -> tuple[list[str], Optional[str]]:
+    """Computes and renders every report the user asked for, in a fixed order."""
+    calculator = WeatherCalculator(readings_by_month)
+    reporter = ConsoleReportGenerator()
+    sections: list[str] = []
 
     if args.e is not None:
-        yearly_result = calculate_yearly_extremes(readings_by_month, args.e)
-        if not yearly_result:
-            return reports, f"No readings found for year {args.e}"
-        reports.append(render_yearly_extremes(yearly_result))
+        text, error = _yearly_report(args.e, calculator, reporter)
+        if error:
+            return sections, error
+        sections.append(text)
 
     if args.a is not None:
         year, month = args.a
-        monthly_result = calculate_monthly_averages(readings_by_month, year, month)
-        if monthly_result is None:
-            return reports, f"No readings found for {year}-{month:02d}"
-        reports.append(render_monthly_averages(monthly_result))
+        text, error = _monthly_report(year, month, calculator, reporter)
+        if error:
+            return sections, error
+        sections.append(text)
 
     if args.c is not None:
         year, month = args.c
-        daily_results = calculate_daily_extremes(readings_by_month, year, month)
-        if daily_results is None:
-            return reports, f"No readings found for {year}-{month:02d}"
-        render_chart = (
-            render_combined_temperature_bars
-            if args.combined
-            else render_separate_temperature_bars
-        )
-        reports.append(render_chart(year, month, daily_results))
+        text, error = _daily_report(year, month, args.combined, calculator, reporter)
+        if error:
+            return sections, error
+        sections.append(text)
 
-    return reports, None
+    return sections, None
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
+    """Orchestrates the lifecycle of parsing data, calculating metrics, and printing reports."""
     parser = build_argument_parser()
     args = parser.parse_args(argv)
 
     if args.e is None and args.a is None and args.c is None:
         parser.error("at least one of -e, -a, -c is required")
 
+    sections: list[str] = []
+    error_message: str | None = None
+
     try:
-        # 1. Parse Data
-        readings_by_month = parse_directory(args.directory)
-
-        # 2. Generate Sections
-        sections: List[str] = []
-        if args.e is not None:
-            result = calculate_yearly_extremes(readings_by_month, args.e)
-            sections.append(render_yearly_extremes(result))
-
-        if args.a is not None:
-            year, month = args.a
-            result = calculate_monthly_averages(readings_by_month, year, month)
-            sections.append(render_monthly_averages(result))
-
-        if args.c is not None:
-            year, month = args.c
-            days = calculate_daily_extremes(readings_by_month, year, month)
-            renderer = (
-                render_combined_temperature_bars
-                if args.combined
-                else render_separate_temperature_bars
-            )
-            sections.append(renderer(year, month, days))
-
-        # 3. Output
-        print("\n\n".join(sections))
-        return 0
-
-    # Consolidated Error Handling
+        directory_parser = DirectoryParser(WeatherDataParser())
+        readings_by_month = directory_parser.process_directory(args.directory)
     except (NotADirectoryError, FileNotFoundError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        error_message = str(exc)
+    else:
+        sections, error_message = build_requested_reports(args, readings_by_month)
+
+    if error_message is not None:
+        print(f"Error: {error_message}", file=sys.stderr)
+        exit_code = 1
+    else:
+        print("\n\n".join(sections))
+        exit_code = 0
+
+    return exit_code
 
 
 if __name__ == "__main__":
