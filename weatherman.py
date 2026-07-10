@@ -68,7 +68,7 @@ def build_requested_reports(
 
     if args.e is not None:
         yearly_result = calculate_yearly_extremes(readings_by_month, args.e)
-        if yearly_result is None:
+        if not yearly_result:
             return reports, f"No readings found for year {args.e}"
         reports.append(render_yearly_extremes(yearly_result))
 
