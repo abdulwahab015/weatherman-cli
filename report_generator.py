@@ -12,9 +12,9 @@ from data_models import DailyExtreme, MonthlyAverages, YearlyExtremes
 class ConsoleReportGenerator:
     """Formats calculation results into standard text reports for the console."""
 
-    def _format_month_day(self, value: date) -> str:
+    def _format_month_day(self, reading_date: date) -> str:
         """Formats a date as 'Month Day' (e.g., 'June 23')."""
-        return f"{value.strftime('%B')} {value.day}"
+        return f"{reading_date.strftime('%B')} {reading_date.day}"
 
     def _format_month_year(self, year: int, month: int) -> str:
         """Formats a header as 'Month Year' (e.g., 'March 2011')."""
