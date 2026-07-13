@@ -39,12 +39,12 @@ class WeatherCalculator:
         select_extreme: Callable[..., WeatherReading],
     ) -> Optional[WeatherReading]:
         """Locates the reading containing the extreme maximum or minimum value."""
+        extreme_reading: Optional[WeatherReading] = None
         readings_with_value = [
             reading
             for reading in candidate_readings
             if value_extractor(reading) is not None
         ]
-        extreme_reading: Optional[WeatherReading] = None
 
         if readings_with_value:
             extreme_reading = select_extreme(readings_with_value, key=value_extractor)
@@ -53,16 +53,16 @@ class WeatherCalculator:
 
     def _calculate_mean(
         self,
-        readings: list[WeatherReading],
+        candidate_readings: list[WeatherReading],
         value_extractor: Callable[[WeatherReading], Optional[int]],
     ) -> Optional[float]:
         """Computes the mean of a specific metric across a list of readings."""
+        mean_value: Optional[float] = None
         valid_mean_values = [
             value
-            for reading in readings
+            for reading in candidate_readings
             if (value := value_extractor(reading)) is not None
         ]
-        mean_value: Optional[float] = None
 
         if valid_mean_values:
             mean_value = mean(valid_mean_values)
