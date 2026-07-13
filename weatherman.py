@@ -6,12 +6,15 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from calculations import WeatherCalculator
 from data_models import ReadingsByMonth
 from file_parser import DirectoryParser, WeatherDataParser
 from report_generator import ConsoleReportGenerator
+from report_service import ReportResult, WeatherReportService
+
+ReportCall = Callable[[], ReportResult]
 
 
 def parse_year_month_argument(value: str) -> tuple[int, int]:
@@ -51,73 +54,30 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _yearly_report(
-    year: int, calculator: WeatherCalculator, reporter: ConsoleReportGenerator
-) -> tuple[Optional[str], Optional[str]]:
-    """Returns (rendered_text, error_message) - exactly one of the two is None."""
-    result = calculator.calculate_yearly_extremes(year)
-    if result is None:
-        return None, f"No readings found for year {year}"
+def _requested_report_calls(
+    args: argparse.Namespace, report_service: WeatherReportService
+) -> list[ReportCall]:
+    """Builds one no-argument call per requested report, in a fixed order."""
+    possible_reports: list[tuple[Any, ReportCall]] = [
+        (args.e, lambda: report_service.yearly_report(args.e)),
+        (args.a, lambda: report_service.monthly_report(*args.a)),
+        (args.c, lambda: report_service.daily_report(*args.c, args.combined)),
+    ]
 
-    return reporter.render_yearly_extremes(result), None
-
-
-def _monthly_report(
-    year: int,
-    month: int,
-    calculator: WeatherCalculator,
-    reporter: ConsoleReportGenerator,
-) -> tuple[Optional[str], Optional[str]]:
-    result = calculator.calculate_monthly_averages(year, month)
-    if result is None:
-        return None, f"No readings found for {year}-{month:02d}"
-
-    return reporter.render_monthly_averages(result), None
-
-
-def _daily_report(
-    year: int,
-    month: int,
-    combined: bool,
-    calculator: WeatherCalculator,
-    reporter: ConsoleReportGenerator,
-) -> tuple[Optional[str], Optional[str]]:
-    result = calculator.calculate_daily_extremes(year, month)
-    if result is None:
-        return None, f"No readings found for {year}-{month:02d}"
-    render = (
-        reporter.render_combined_temperature_bars
-        if combined
-        else reporter.render_separate_temperature_bars
-    )
-
-    return render(year, month, result), None
+    return [call for requested, call in possible_reports if requested is not None]
 
 
 def build_requested_reports(
     args: argparse.Namespace, readings_by_month: ReadingsByMonth
 ) -> tuple[list[str], Optional[str]]:
     """Computes and renders every report the user asked for, in a fixed order."""
-    calculator = WeatherCalculator(readings_by_month)
-    reporter = ConsoleReportGenerator()
+    report_service = WeatherReportService(
+        WeatherCalculator(readings_by_month), ConsoleReportGenerator()
+    )
     sections: list[str] = []
 
-    if args.e is not None:
-        text, error = _yearly_report(args.e, calculator, reporter)
-        if error:
-            return sections, error
-        sections.append(text)
-
-    if args.a is not None:
-        year, month = args.a
-        text, error = _monthly_report(year, month, calculator, reporter)
-        if error:
-            return sections, error
-        sections.append(text)
-
-    if args.c is not None:
-        year, month = args.c
-        text, error = _daily_report(year, month, args.combined, calculator, reporter)
+    for produce_report in _requested_report_calls(args, report_service):
+        text, error = produce_report()
         if error:
             return sections, error
         sections.append(text)
