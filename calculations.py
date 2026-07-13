@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from statistics import mean
 from typing import Callable, Optional
 
@@ -24,37 +25,42 @@ class WeatherCalculator:
     def _get_readings_for_year(self, year: int) -> list[WeatherReading]:
         """Aggregates all monthly readings into a flat list for a given year."""
         yearly_readings: list[WeatherReading] = []
-        for (bucket_year, _), month_readings in self.readings_by_month.items():
-            if bucket_year == year:
+        for month_key, month_readings in self.readings_by_month.items():
+            entry_year, _entry_month = month_key
+            if entry_year == year:
                 yearly_readings.extend(month_readings)
 
         return yearly_readings
 
     def _find_extreme_reading(
         self,
-        readings: list[WeatherReading],
-        extractor: Callable[[WeatherReading], Optional[int]],
-        comparator: Callable[..., WeatherReading],
+        candidate_readings: list[WeatherReading],
+        value_extractor: Callable[[WeatherReading], Optional[int]],
+        select_extreme: Callable[..., WeatherReading],
     ) -> Optional[WeatherReading]:
         """Locates the reading containing the extreme maximum or minimum value."""
-        valid_readings = [
-            reading for reading in readings if extractor(reading) is not None
+        readings_with_value = [
+            reading
+            for reading in candidate_readings
+            if value_extractor(reading) is not None
         ]
         extreme_reading: Optional[WeatherReading] = None
 
-        if valid_readings:
-            extreme_reading = comparator(valid_readings, key=extractor)
+        if readings_with_value:
+            extreme_reading = select_extreme(readings_with_value, key=value_extractor)
 
         return extreme_reading
 
     def _calculate_mean(
         self,
         readings: list[WeatherReading],
-        extractor: Callable[[WeatherReading], Optional[int]],
+        value_extractor: Callable[[WeatherReading], Optional[int]],
     ) -> Optional[float]:
         """Computes the mean of a specific metric across a list of readings."""
         valid_mean_values = [
-            value for reading in readings if (value := extractor(reading)) is not None
+            value
+            for reading in readings
+            if (value := value_extractor(reading)) is not None
         ]
         mean_value: Optional[float] = None
 
@@ -63,31 +69,53 @@ class WeatherCalculator:
 
         return mean_value
 
+    def _extreme_value_and_date(
+        self,
+        candidate_readings: list[WeatherReading],
+        value_extractor: Callable[[WeatherReading], Optional[int]],
+        select_extreme: Callable[..., WeatherReading],
+    ) -> tuple[Optional[int], Optional[date]]:
+        """Finds the extreme reading for one metric and returns its (value, date).
+
+        Returns (None, None) if no reading in the list has this field at all.
+        """
+        extreme_reading = self._find_extreme_reading(
+            candidate_readings, value_extractor, select_extreme
+        )
+        value: Optional[int] = None
+        reading_date: Optional[date] = None
+
+        if extreme_reading is not None:
+            value = value_extractor(extreme_reading)
+            reading_date = extreme_reading.reading_date
+
+        return value, reading_date
+
     def calculate_yearly_extremes(self, year: int) -> Optional[YearlyExtremes]:
         """Computes the highest temperature, lowest temperature, and maximum
         humidity for a year."""
+        result: Optional[YearlyExtremes] = None
         year_readings = self._get_readings_for_year(year)
 
-        hottest = self._find_extreme_reading(
+        highest_temp, highest_temp_date = self._extreme_value_and_date(
             year_readings, lambda reading: reading.max_temp, max
         )
-        coldest = self._find_extreme_reading(
+        lowest_temp, lowest_temp_date = self._extreme_value_and_date(
             year_readings, lambda reading: reading.min_temp, min
         )
-        most_humid = self._find_extreme_reading(
+        most_humid_value, most_humid_date = self._extreme_value_and_date(
             year_readings, lambda reading: reading.max_humidity, max
         )
 
-        result: Optional[YearlyExtremes] = None
-        if hottest or coldest or most_humid:
+        if any((highest_temp_date, lowest_temp_date, most_humid_date)):
             result = YearlyExtremes(
                 year=year,
-                highest_temp=hottest.max_temp if hottest else None,
-                highest_temp_date=hottest.reading_date if hottest else None,
-                lowest_temp=coldest.min_temp if coldest else None,
-                lowest_temp_date=coldest.reading_date if coldest else None,
-                most_humid_value=most_humid.max_humidity if most_humid else None,
-                most_humid_date=most_humid.reading_date if most_humid else None,
+                highest_temp=highest_temp,
+                highest_temp_date=highest_temp_date,
+                lowest_temp=lowest_temp,
+                lowest_temp_date=lowest_temp_date,
+                most_humid_value=most_humid_value,
+                most_humid_date=most_humid_date,
             )
 
         return result
@@ -96,8 +124,8 @@ class WeatherCalculator:
         self, year: int, month: int
     ) -> Optional[MonthlyAverages]:
         """Computes the average high, low, and humidity for a specific month."""
-        month_readings = self.readings_by_month.get((year, month), [])
         result: Optional[MonthlyAverages] = None
+        month_readings = self.readings_by_month.get((year, month), [])
 
         if month_readings:
             result = MonthlyAverages(
@@ -120,8 +148,8 @@ class WeatherCalculator:
         self, year: int, month: int
     ) -> Optional[list[DailyExtreme]]:
         """Extracts the high and low temperatures for each day in a month."""
-        month_readings = self.readings_by_month.get((year, month), [])
         daily_extremes: Optional[list[DailyExtreme]] = None
+        month_readings = self.readings_by_month.get((year, month), [])
 
         if month_readings:
             latest_reading_by_day = {
