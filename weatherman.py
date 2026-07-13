@@ -130,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_argument_parser()
     args = parser.parse_args(argv)
 
-    if args.e is None and args.a is None and args.c is None:
+    if not any((args.e, args.a, args.c)):
         parser.error("at least one of -e, -a, -c is required")
 
     sections: list[str] = []
