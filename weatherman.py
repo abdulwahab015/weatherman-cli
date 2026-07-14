@@ -10,7 +10,8 @@ from typing import Any, Callable, Optional
 
 from calculations import WeatherCalculator
 from data_models import ReadingsByMonth
-from file_parser import DirectoryParser, WeatherDataParser
+from file_parser import WeatherDataParser
+from readings_loader import WeatherReadingsLoader
 from report_generator import ConsoleReportGenerator
 from report_service import ReportResult, WeatherReportService
 
@@ -97,8 +98,8 @@ def main(argv: list[str] | None = None) -> int:
     error_message: str | None = None
 
     try:
-        directory_parser = DirectoryParser(WeatherDataParser())
-        readings_by_month = directory_parser.process_directory(args.directory)
+        readings_loader = WeatherReadingsLoader(WeatherDataParser())
+        readings_by_month = readings_loader.load_directory(args.directory)
     except (NotADirectoryError, FileNotFoundError) as exc:
         error_message = str(exc)
     else:
