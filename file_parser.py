@@ -1,4 +1,4 @@
-"""Module for parsing weather data files using object-oriented principles."""
+"""Parses a single weather data file into structured WeatherReading records."""
 
 import csv
 from datetime import date, datetime
@@ -6,15 +6,20 @@ from pathlib import Path
 from typing import Optional
 
 from constants import DATE_FORMAT
-from data_models import ReadingsByMonth, WeatherReading
+from data_models import WeatherReading
 from mappings import NUMERIC_COLUMNS_BY_FIELD
 
 
 class WeatherDataParser:
-    """Parses individual raw weather CSV files into structured data models."""
+    """Parses one raw weather CSV file into a list of WeatherReading records."""
 
     def _parse_integer(self, cell_data: Optional[str]) -> Optional[int]:
-        """Converts a raw string cell value into an integer safely."""
+        """Converts a raw string cell into an int, rounding to the nearest whole
+        number if the source file happens to format it with a decimal (e.g.
+        '23.0'). Nothing here is ever displayed with decimals - this only
+        exists so a value like '23.0' parses instead of raising, since
+        int() alone cannot parse a string containing a decimal point.
+        """
         clean_data = (cell_data or "").strip()
         parsed_value: Optional[int] = None
 
@@ -79,51 +84,6 @@ class WeatherDataParser:
                     }
                     weather_reading = self._build_reading(normalized_row, date_column)
                     if weather_reading:
-                        file_readings.append(weather_reading)
+                        weather_file_readings.append(weather_reading)
 
-        return file_readings
-
-
-class DirectoryParser:
-    """Handles directory scanning and aggregates streamed weather observations by month."""
-
-    def __init__(self, file_parser: WeatherDataParser) -> None:
-        """Injects the required single-file parser dependency."""
-        self.file_parser = file_parser
-
-    def process_directory(self, directory_path: Path) -> ReadingsByMonth:
-        """Scans a directory and aggregates all valid observations bucketed by year and month."""
-        weather_files = self._find_weather_files(directory_path)
-        readings_by_month: ReadingsByMonth = {}
-
-        for file_path in weather_files:
-            try:
-                self._add_file_readings(file_path, readings_by_month)
-            except (OSError, csv.Error):
-                continue
-
-        return readings_by_month
-
-    def _find_weather_files(self, directory_path: Path) -> list[Path]:
-        """Validates the directory and returns the .txt files inside it."""
-        if not directory_path.is_dir():
-            raise NotADirectoryError(f"'{directory_path}' is not a valid directory")
-
-        weather_files = sorted(directory_path.glob("*.txt"))
-        if not weather_files:
-            raise FileNotFoundError(
-                f"No .txt weather files found in '{directory_path}'"
-            )
-
-        return weather_files
-
-    def _add_file_readings(
-        self, file_path: Path, readings_by_month: ReadingsByMonth
-    ) -> None:
-        """Parses one file and merges its readings into the shared month buckets."""
-        for weather_reading in self.file_parser.parse_file(file_path):
-            month_key = (
-                weather_reading.reading_date.year,
-                weather_reading.reading_date.month,
-            )
-            readings_by_month.setdefault(month_key, []).append(weather_reading)
+        return weather_file_readings
