@@ -35,10 +35,10 @@ class ConsoleReportGenerator:
         ]
 
         lines = [
-            f"{label}: {value_format.format(value)} on "
-            f"{self._format_month_day(extreme_date)}"
-            for value, label, value_format, extreme_date in metrics
-            if value is not None
+            f"{metric_label}: {metric_format.format(metric_value)} on "
+            f"{self._format_month_day(metric_date)}"
+            for metric_value, metric_label, metric_format, metric_date in metrics
+            if metric_value is not None
         ]
 
         return "\n".join(lines)
@@ -52,9 +52,9 @@ class ConsoleReportGenerator:
         ]
 
         lines = [
-            f"{label}: {value_format.format(value)}"
-            for value, label, value_format in metrics
-            if value is not None
+            f"{metric_label}: {metric_format.format(metric_value)}"
+            for metric_value, metric_label, metric_format in metrics
+            if metric_value is not None
         ]
 
         return "\n".join(lines)
@@ -106,7 +106,7 @@ class ConsoleReportGenerator:
         bar_lines = [
             self._combined_bar_line(day_extreme)
             for day_extreme in days
-            if not day_extreme.min_temp and not day_extreme.max_temp 
+            if day_extreme.min_temp is not None and day_extreme.max_temp is not None
         ]
 
         return "\n".join(header + bar_lines)
