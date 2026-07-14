@@ -61,7 +61,7 @@ class WeatherDataParser:
 
     def parse_file(self, file_path: Path) -> list[WeatherReading]:
         """Reads and parses every usable row from a specific file."""
-        file_readings: list[WeatherReading] = []
+        weather_file_readings: list[WeatherReading] = []
 
         with file_path.open(newline="", encoding="utf-8", errors="replace") as stream:
             reader = csv.DictReader(stream)
