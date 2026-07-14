@@ -34,7 +34,7 @@ class WeatherCalculator:
 
     def _find_extreme_reading(
         self,
-        candidate_readings: list[WeatherReading],
+        weather_file_readings: list[WeatherReading],
         value_extractor: Callable[[WeatherReading], Optional[int]],
         select_extreme: Callable[..., WeatherReading],
     ) -> Optional[WeatherReading]:
