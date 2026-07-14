@@ -106,7 +106,7 @@ class ConsoleReportGenerator:
         bar_lines = [
             self._combined_bar_line(day_extreme)
             for day_extreme in days
-            if day_extreme.min_temp is not None and day_extreme.max_temp is not None
+            if not day_extreme.min_temp and not day_extreme.max_temp 
         ]
 
         return "\n".join(header + bar_lines)
