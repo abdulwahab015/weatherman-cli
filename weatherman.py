@@ -5,11 +5,13 @@ from __future__ import annotations
 import os
 import sys
 
-from cli_arguments import build_argument_parser
 from file_parser import WeatherDataParser
-from readings_loader import WeatherReadingsLoader
-from report_dispatch import build_requested_reports
-from report_service import ReportResult
+from helpers import (
+    CliArgumentParser,
+    ReportResult,
+    RequestedReportBuilder,
+    WeatherReadingsLoader,
+)
 
 
 def _format_report_result(report_result: ReportResult) -> str:
@@ -22,7 +24,7 @@ def _format_report_result(report_result: ReportResult) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     """Orchestrates the lifecycle of parsing data, calculating metrics, and printing reports."""
-    parser = build_argument_parser()
+    parser = CliArgumentParser().build()
     args = parser.parse_args(argv)
 
     if not args.requested_reports:
@@ -37,7 +39,8 @@ def main(argv: list[str] | None = None) -> int:
     except (NotADirectoryError, FileNotFoundError) as exc:
         directory_error_message = str(exc)
     else:
-        report_results = build_requested_reports(args, readings_by_month)
+        report_builder = RequestedReportBuilder(readings_by_month)
+        report_results = report_builder.build_reports(args)
 
     if directory_error_message is not None:
         print(f"Error: {directory_error_message}", file=sys.stderr)

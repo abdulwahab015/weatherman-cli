@@ -14,7 +14,12 @@ class WeatherDataParser:
     """Parses one raw weather CSV file into a list of WeatherReading records."""
 
     def _parse_integer(self, cell_data: Optional[str]) -> Optional[int]:
-        """Converts a raw string cell into an int."""
+        """Converts a raw string cell into an int, rounding to the nearest whole
+        number if the source file happens to format it with a decimal (e.g.
+        '23.0'). Nothing here is ever displayed with decimals - this only
+        exists so a value like '23.0' parses instead of raising, since
+        int() alone cannot parse a string containing a decimal point.
+        """
         clean_data = (cell_data or "").strip()
         parsed_value: Optional[int] = None
 
@@ -59,6 +64,28 @@ class WeatherDataParser:
 
         return weather_reading
 
+    def _normalize_row(self, raw_row: dict[str, str]) -> dict[str, str]:
+        """Strips stray whitespace from column names, e.g. ' Mean Humidity'."""
+        return {
+            column_name.strip(): cell_data
+            for column_name, cell_data in raw_row.items()
+            if column_name is not None
+        }
+
+    def _parse_rows(
+        self, reader: csv.DictReader, date_column: str
+    ) -> list[WeatherReading]:
+        """Parses every row from an open CSV reader into WeatherReading records."""
+        readings: list[WeatherReading] = []
+
+        for raw_row in reader:
+            normalized_row = self._normalize_row(raw_row)
+            weather_reading = self._build_reading(normalized_row, date_column)
+            if weather_reading:
+                readings.append(weather_reading)
+
+        return readings
+
     def parse_file(self, file_path: Path) -> list[WeatherReading]:
         """Reads and parses every usable row from a specific file."""
         weather_file_readings: list[WeatherReading] = []
@@ -71,14 +98,6 @@ class WeatherDataParser:
 
             if clean_headers:
                 date_column, *_ = clean_headers
-                for raw_row in reader:
-                    normalized_row = {
-                        column_name.strip(): cell_data
-                        for column_name, cell_data in raw_row.items()
-                        if column_name is not None
-                    }
-                    weather_reading = self._build_reading(normalized_row, date_column)
-                    if weather_reading:
-                        weather_file_readings.append(weather_reading)
+                weather_file_readings = self._parse_rows(reader, date_column)
 
         return weather_file_readings
