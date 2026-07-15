@@ -14,12 +14,7 @@ class WeatherDataParser:
     """Parses one raw weather CSV file into a list of WeatherReading records."""
 
     def _parse_integer(self, cell_data: Optional[str]) -> Optional[int]:
-        """Converts a raw string cell into an int, rounding to the nearest whole
-        number if the source file happens to format it with a decimal (e.g.
-        '23.0'). Nothing here is ever displayed with decimals - this only
-        exists so a value like '23.0' parses instead of raising, since
-        int() alone cannot parse a string containing a decimal point.
-        """
+        """Converts a raw string cell into an int."""
         clean_data = (cell_data or "").strip()
         parsed_value: Optional[int] = None
 
@@ -57,7 +52,7 @@ class WeatherDataParser:
                 for field_name, column_name in NUMERIC_COLUMNS_BY_FIELD.items()
             }
 
-            if any(value is not None for value in numeric_fields.values()):
+            if any(field_value is not None for field_value in numeric_fields.values()):
                 weather_reading = WeatherReading(
                     reading_date=reading_date, **numeric_fields
                 )

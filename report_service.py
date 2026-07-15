@@ -13,11 +13,7 @@ CalculationResult = TypeVar("CalculationResult")
 
 
 class WeatherReportService:
-    """Produces rendered report text for one report type, or a not-found message.
-
-    Each method assumes the caller has already decided this report was
-    requested - no re-validation of that decision happens here.
-    """
+    """Produces rendered report text for one report type, or a not-found message."""
 
     def __init__(
         self, calculator: WeatherCalculator, reporter: ConsoleReportGenerator
@@ -31,12 +27,7 @@ class WeatherReportService:
         render: Callable[[CalculationResult], str],
         not_found_message: str,
     ) -> ReportResult:
-        """Runs compute(); renders the result if found, otherwise reports why not.
-
-        Shared by yearly_report/monthly_report/daily_report below, since all
-        three follow the same shape and only differ in which calculation to
-        run, how to render it, and what "not found" means for that report.
-        """
+        """Runs compute(); renders the result if found, otherwise reports why not."""
         result = compute()
         text = render(result) if result is not None else None
         error = None if result is not None else not_found_message
