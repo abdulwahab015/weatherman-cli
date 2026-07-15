@@ -15,23 +15,24 @@ from data_models import (
 )
 
 
+def _readings_for_year(
+    readings_by_month: ReadingsByMonth, year: int
+) -> list[WeatherReading]:
+    """Aggregates all monthly readings into a flat list for a given year."""
+    return [
+        reading
+        for (entry_year, _entry_month), month_readings in readings_by_month.items()
+        if entry_year == year
+        for reading in month_readings
+    ]
+
+
 class WeatherCalculator:
     """Calculates aggregate weather statistics from grouped monthly readings."""
 
     def __init__(self, readings_by_month: ReadingsByMonth) -> None:
         """Injects the dataset dependency."""
         self.readings_by_month = readings_by_month
-
-    def _get_readings_for_year(self, year: int) -> list[WeatherReading]:
-        """Aggregates all monthly readings into a flat list for a given year."""
-        return [
-            reading
-            for (entry_year, _entry_month), month_readings in (
-                self.readings_by_month.items()
-            )
-            if entry_year == year
-            for reading in month_readings
-        ]
 
     def _find_extreme_reading(
         self,
@@ -88,7 +89,7 @@ class WeatherCalculator:
             weather_file_readings, metric_value_extractor, select_extreme_reading
         )
 
-        if extreme_reading is not None:
+        if extreme_reading:
             extreme_metric_value = metric_value_extractor(extreme_reading)
             extreme_reading_date = extreme_reading.reading_date
 
@@ -98,7 +99,7 @@ class WeatherCalculator:
         """Computes the highest temperature, lowest temperature, and maximum
         humidity for a year."""
         yearly_extremes: Optional[YearlyExtremes] = None
-        year_readings = self._get_readings_for_year(year)
+        year_readings = _readings_for_year(self.readings_by_month, year)
 
         highest_temp, highest_temp_date = self._extreme_value_and_date(
             year_readings, lambda reading: reading.max_temp, max
