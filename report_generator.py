@@ -5,7 +5,17 @@ from __future__ import annotations
 import calendar
 from datetime import date
 
-from constants import ANSI_BLUE, ANSI_RED, ANSI_RESET
+from constants import (
+    ANSI_BLUE,
+    ANSI_RED,
+    ANSI_RESET,
+    LABEL_AVERAGE_MEAN_HUMIDITY,
+    LABEL_HIGHEST,
+    LABEL_HIGHEST_AVERAGE,
+    LABEL_HUMIDITY,
+    LABEL_LOWEST,
+    LABEL_LOWEST_AVERAGE,
+)
 from data_models import DailyExtreme, MonthlyAverages, YearlyExtremes
 
 
@@ -29,9 +39,9 @@ class ConsoleReportGenerator:
     def render_yearly_extremes(self, result: YearlyExtremes) -> str:
         """Renders whichever of the three metrics are actually available."""
         metrics = [
-            (result.highest_temp, "Highest", "{:02d}C", result.highest_temp_date),
-            (result.lowest_temp, "Lowest", "{:02d}C", result.lowest_temp_date),
-            (result.most_humid_value, "Humidity", "{}%", result.most_humid_date),
+            (result.highest_temp, LABEL_HIGHEST, "{:02d}C", result.highest_temp_date),
+            (result.lowest_temp, LABEL_LOWEST, "{:02d}C", result.lowest_temp_date),
+            (result.most_humid_value, LABEL_HUMIDITY, "{}%", result.most_humid_date),
         ]
 
         lines = [
@@ -46,9 +56,9 @@ class ConsoleReportGenerator:
     def render_monthly_averages(self, result: MonthlyAverages) -> str:
         """Renders whichever averages are actually available."""
         metrics = [
-            (result.avg_highest_temp, "Highest Average", "{:.0f}C"),
-            (result.avg_lowest_temp, "Lowest Average", "{:.0f}C"),
-            (result.avg_mean_humidity, "Average Mean Humidity", "{:.0f}%"),
+            (result.avg_highest_temp, LABEL_HIGHEST_AVERAGE, "{:.0f}C"),
+            (result.avg_lowest_temp, LABEL_LOWEST_AVERAGE, "{:.0f}C"),
+            (result.avg_mean_humidity, LABEL_AVERAGE_MEAN_HUMIDITY, "{:.0f}%"),
         ]
 
         lines = [

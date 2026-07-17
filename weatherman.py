@@ -6,50 +6,31 @@ import os
 import sys
 
 from file_parser import WeatherDataParser
-from helpers import (
-    CliArgumentParser,
-    ReportResult,
-    RequestedReportBuilder,
-    WeatherReadingsLoader,
-)
-
-
-def _format_report_result(report_result: ReportResult) -> str:
-    """Renders one report's outcome as printable text: its report text if
-    it succeeded, or an 'Error: ...' line if it didn't."""
-    report_text, error_message = report_result
-
-    return report_text if error_message is None else f"Error: {error_message}"
+from helpers import build_argument_parser, build_requested_reports, format_report_result
+from readings_loader import WeatherReadingsLoader
 
 
 def main(argv: list[str] | None = None) -> int:
     """Orchestrates the lifecycle of parsing data, calculating metrics, and printing reports."""
-    parser = CliArgumentParser().build()
+    parser = build_argument_parser()
     args = parser.parse_args(argv)
 
     if not args.requested_reports:
         parser.error("at least one of -e, -a, -c is required")
 
-    report_results: list[ReportResult] = []
-    directory_error_message: str | None = None
-
     try:
         readings_loader = WeatherReadingsLoader(WeatherDataParser())
         readings_by_month = readings_loader.load_directory(args.directory)
     except (NotADirectoryError, FileNotFoundError) as exc:
-        directory_error_message = str(exc)
-    else:
-        report_builder = RequestedReportBuilder(readings_by_month)
-        report_results = report_builder.build_reports(args)
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
-    if directory_error_message is not None:
-        print(f"Error: {directory_error_message}", file=sys.stderr)
-        exit_code = 1
-    else:
-        output_lines = [_format_report_result(result) for result in report_results]
-        any_report_failed = any(error is not None for _, error in report_results)
-        print("\n\n".join(output_lines))
-        exit_code = 1 if any_report_failed else 0
+    report_results = build_requested_reports(args, readings_by_month)
+    formatted_reports = [format_report_result(result) for result in report_results]
+    any_report_failed = any(error is not None for _, error in report_results)
+    print("\n\n".join(formatted_reports))
+
+    exit_code = 1 if any_report_failed else 0
 
     return exit_code
 

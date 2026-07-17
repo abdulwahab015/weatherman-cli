@@ -13,18 +13,7 @@ from data_models import (
     WeatherReading,
     YearlyExtremes,
 )
-
-
-def _get_readings_for_year(
-    readings_by_month: ReadingsByMonth, year: int
-) -> list[WeatherReading]:
-    """Aggregates all monthly readings into a flat list for a given year."""
-    return [
-        reading
-        for (entry_year, _entry_month), month_readings in readings_by_month.items()
-        if entry_year == year
-        for reading in month_readings
-    ]
+from readings_loader import WeatherReadingsLoader
 
 
 class WeatherCalculator:
@@ -99,7 +88,9 @@ class WeatherCalculator:
         """Computes the highest temperature, lowest temperature, and maximum
         humidity for a year."""
         yearly_extremes: Optional[YearlyExtremes] = None
-        year_readings = _get_readings_for_year(self.readings_by_month, year)
+        year_readings = WeatherReadingsLoader.readings_for_year(
+            self.readings_by_month, year
+        )
 
         highest_temp, highest_temp_date = self._extreme_value_and_date(
             year_readings, lambda reading: reading.max_temp, max
