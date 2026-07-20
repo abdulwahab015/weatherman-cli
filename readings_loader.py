@@ -20,10 +20,13 @@ class WeatherReadingsLoader:
     ) -> list[WeatherReading]:
         """Aggregates all monthly readings into a flat list for a given year."""
         return [
-            reading
-            for (entry_year, _entry_month), month_readings in readings_by_month.items()
+            weather_reading
+            for (
+                entry_year,
+                _entry_month,
+            ), monthly_weather_readings in readings_by_month.items()
             if entry_year == year
-            for reading in month_readings
+            for weather_reading in monthly_weather_readings
         ]
 
     def load_directory(self, directory_path: Path) -> ReadingsByMonth:
